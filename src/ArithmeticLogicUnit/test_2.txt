@@ -2,3 +2,4 @@ inp z
 inp x
 mul z 3
 eql z x
+eql z 0

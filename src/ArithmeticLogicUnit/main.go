@@ -6,7 +6,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 )
 
@@ -32,6 +31,7 @@ var (
 	evalCount   int32
 )
 
+// Instruction represents a parsed line from the input file.
 type Instruction struct {
 	Type   OperatorType
 	First  *Operand
@@ -67,6 +67,8 @@ func (o OperatorType) String() string {
 	return ""
 }
 
+// Operand can either be an input, var or const.
+// Operand implements Expr interface.
 type Operand struct {
 	Type  OperandType
 	Value interface{} // int for Type const, string for Type var
@@ -103,6 +105,8 @@ func (o *Operand) String() string {
 	return ""
 }
 
+// Operation represents an operator and its 2 sub-expressions.
+// Operation implements Expr interface.
 type Operation struct {
 	ID     int
 	Type   OperatorType
@@ -130,7 +134,7 @@ func (o *Operation) String() string {
 	return fmt.Sprintf("(%s %s %s)", o.First, o.Type, o.Second)
 }
 
-// Expr consists of Operand and Operation
+// Expr can either be an Operand or an Operation.
 type Expr interface {
 	GetType() string
 	GetValue() int
@@ -138,7 +142,7 @@ type Expr interface {
 }
 
 func main() {
-	input := parseInput("in.txt")
+	input := parseInput("test_2.txt")
 	//fmt.Println(input)
 	fmt.Println(solveFirst(input))
 }
@@ -246,6 +250,8 @@ func solveFirst(input []*Instruction) string {
 			finalRes = res
 		}
 	}*/
+
+	// Assert z == 0 after evaluation
 	res := searchMaxValidInput(&Operation{
 		Type:  OpEql,
 		First: exprMap['z'],
@@ -258,6 +264,7 @@ func solveFirst(input []*Instruction) string {
 	return toString(res)
 }
 
+// evalInstr evaluates the resulting expression from the given operator and operands.
 func evalInstr(exprMap map[byte]Expr, opType OperatorType, first *Operand, second *Operand) {
 	// First operand is always a var
 	firstExpr := exprMap[first.Value.(byte)]
@@ -289,6 +296,7 @@ func evalInstr(exprMap map[byte]Expr, opType OperatorType, first *Operand, secon
 	}
 }
 
+// evalSpecial evaluates special cases pertaining to the given operator and operands, e.g. multiplication by 0.
 func evalSpecial(opType OperatorType, first Expr, second Expr) (Expr, bool) {
 	switch opType {
 	case OpAdd:
@@ -323,6 +331,7 @@ func evalSpecial(opType OperatorType, first Expr, second Expr) (Expr, bool) {
 	return nil, false
 }
 
+// evalOp evaluates the result of a simple arithmetic operation.
 func evalOp(op OperatorType, first *Operand, second *Operand) *Operand {
 	if first.Type != OpConst || second.Type != OpConst {
 		panic(fmt.Sprintf("invalid eval of type %s and %s", first.Type, second.Type))
@@ -353,14 +362,16 @@ func evalOp(op OperatorType, first *Operand, second *Operand) *Operand {
 	}
 }
 
+// searchMaxValidInput does a grid search of all possible input values that satisfies the given expr.
 func searchMaxValidInput(expr Expr, input []int) []int {
 	if len(input) == inputLength {
+		// Input length is satisfied, evaluate expression
 		newCount := atomic.AddInt32(&evalCount, 1)
 		if newCount%1000 == 0 {
 			fmt.Printf("Eval count: %d\n", newCount)
 		}
 
-		if evalExpr(expr, input, make(map[int]int), &sync.RWMutex{}) == 1 {
+		if evalExpr(expr, input, make(map[int]int)) == 1 {
 			fmt.Printf("Valid eval %v\n", input)
 			return input
 		}
@@ -368,6 +379,7 @@ func searchMaxValidInput(expr Expr, input []int) []int {
 	}
 
 	var res []int
+	// Recursively try all possible digits
 	for i := MinDigit; i <= MaxDigit; i++ {
 		cur := searchMaxValidInput(expr, append(input, i))
 		if isArrLess(res, cur) {
@@ -378,7 +390,9 @@ func searchMaxValidInput(expr Expr, input []int) []int {
 	return res
 }
 
-func evalExpr(expr Expr, input []int, exprMemo map[int]int, mutex *sync.RWMutex) int {
+// evalExpr evaluates the result of the given expr using the given inputs.
+// exprMemo is used to memoize expression results to avoid duplicated work.
+func evalExpr(expr Expr, input []int, exprMemo map[int]int) int {
 	if _, ok := expr.(*Operand); ok {
 		// Operand
 		operand := expr.(*Operand)
@@ -397,31 +411,26 @@ func evalExpr(expr Expr, input []int, exprMemo map[int]int, mutex *sync.RWMutex)
 	operation := expr.(*Operation)
 
 	// Check if result is in memo
-	mutex.RLock()
-	res, ok := exprMemo[operation.ID]
-	mutex.RUnlock()
-	if ok {
+	if res, ok := exprMemo[operation.ID]; ok {
 		return res
 	}
 
 	first := &Operand{
 		Type:  OpConst,
-		Value: evalExpr(operation.First, input, exprMemo, mutex),
+		Value: evalExpr(operation.First, input, exprMemo),
 	}
 	second := &Operand{
 		Type:  OpConst,
-		Value: evalExpr(operation.Second, input, exprMemo, mutex),
+		Value: evalExpr(operation.Second, input, exprMemo),
 	}
-	res = evalOp(operation.Type, first, second).Value.(int)
+	res := evalOp(operation.Type, first, second).Value.(int)
 
 	// Put result in memo
-	mutex.Lock()
 	exprMemo[operation.ID] = res
-	mutex.Unlock()
-
 	return res
 }
 
+// isArrLess checks whether first < second lexicographically.
 func isArrLess(first []int, second []int) bool {
 	if len(second) == 0 {
 		return false
@@ -445,6 +454,7 @@ func isArrLess(first []int, second []int) bool {
 	return false
 }
 
+// toString converts an array of digits into its string representation.
 func toString(input []int) string {
 	var sb strings.Builder
 	for _, digit := range input {
