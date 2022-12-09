@@ -286,6 +286,7 @@ func evalInstr(exprMap map[byte]Expr, opType OperatorType, first *Operand, secon
 		// Both operands are constants, directly evaluate
 		exprMap[first.Value.(byte)] = evalOp(opType, firstExpr.(*Operand), secondExpr.(*Operand))
 	} else {
+		// Every time a new Operation is generated, assign a unique exprID for memoization purpose
 		exprMap[first.Value.(byte)] = &Operation{
 			ID:     exprID,
 			Type:   opType,
