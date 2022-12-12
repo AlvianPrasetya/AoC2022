@@ -19,9 +19,12 @@ type Move struct {
 }
 
 func main() {
-	state, moves := parseInput("input.txt")
+	in := "in.txt"
+
+	state, moves := parseInput(in)
 	fmt.Println(solveFirst(state, moves))
-	state, moves = parseInput("input.txt")
+
+	state, moves = parseInput(in)
 	fmt.Println(solveSecond(state, moves))
 }
 

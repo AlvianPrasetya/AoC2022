@@ -72,7 +72,7 @@ type Move struct {
 }
 
 func main() {
-	input := parseInput("input.txt")
+	input := parseInput("in.txt")
 	fmt.Println(solveFirst(input))
 	fmt.Println(solveSecond(input))
 }
