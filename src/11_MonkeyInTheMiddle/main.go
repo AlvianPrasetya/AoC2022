@@ -57,6 +57,9 @@ func main() {
 
 	input = parseInput(in)
 	fmt.Println(solveSecond(input))
+
+	input = parseInput(in)
+	fmt.Println(solveSecondAlt(input))
 }
 
 func parseInput(in string) []*Monkey {
@@ -239,6 +242,57 @@ func solveSecond(monkeys []*Monkey) int {
 
 			inspectCount[i] += len(m.Items)
 			m.Items = nil
+		}
+
+		//fmt.Println(inspectCount)
+	}
+
+	sort.Slice(inspectCount, func(i, j int) bool {
+		return inspectCount[i] > inspectCount[j]
+	})
+
+	return inspectCount[0] * inspectCount[1]
+}
+
+func solveSecondAlt(monkeys []*Monkey) int {
+	roundCount := 10000
+
+	type ItemByModulo map[int]int
+
+	monkeyItems := make([][]ItemByModulo, len(monkeys))
+	for i, m := range monkeys {
+		monkeyItems[i] = make([]ItemByModulo, len(m.Items))
+		for j, item := range m.Items {
+			monkeyItems[i][j] = make(map[int]int)
+			for _, n := range monkeys {
+				monkeyItems[i][j][n.Test.Value] = item % n.Test.Value
+			}
+		}
+	}
+
+	// O(round * items * monkeys)
+	inspectCount := make([]int, len(monkeys))
+	for r := 0; r < roundCount; r++ {
+		for i, m := range monkeys {
+			for _, itemByModulo := range monkeyItems[i] {
+				for mod, item := range itemByModulo {
+					itemByModulo[mod] = eval(item, m.Operation) % mod
+				}
+
+				var target int
+				if test(itemByModulo[m.Test.Value], m.Test) {
+					// True
+					target = m.TrueTarget
+				} else {
+					// False
+					target = m.FalseTarget
+				}
+
+				monkeyItems[target] = append(monkeyItems[target], itemByModulo)
+			}
+
+			inspectCount[i] += len(monkeyItems[i])
+			monkeyItems[i] = nil
 		}
 
 		//fmt.Println(inspectCount)
