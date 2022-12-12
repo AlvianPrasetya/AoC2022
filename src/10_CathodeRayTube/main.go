@@ -77,7 +77,7 @@ func solveSecond(input []Instr) string {
 		mat[i] = make([]byte, 40)
 		for j := 0; j < 40; j++ {
 			cur := strs[i*40+j+1]
-			fmt.Println(i*40+j+1, strs[i*40+j+1])
+			//fmt.Println(i*40+j+1, strs[i*40+j+1])
 			if cur-1 <= j && j <= cur+1 {
 				mat[i][j] = '#'
 			} else {
