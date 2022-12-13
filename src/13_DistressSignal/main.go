@@ -15,24 +15,6 @@ type Pair struct {
 
 type List []interface{} // Each element can be int or List
 
-func (this List) Compare(other List) int {
-	for i, j := 0, 0; i < len(this) && j < len(other); i, j = i+1, j+1 {
-		cmp := compare(this[i], other[j])
-		if cmp != 0 {
-			return cmp
-		}
-	}
-
-	if len(this) < len(other) {
-		return -1
-	}
-	if len(this) > len(other) {
-		return 1
-	}
-
-	return 0
-}
-
 func compare(first interface{}, second interface{}) int {
 	aInt, aIsInt := first.(int)
 	bInt, bIsInt := second.(int)
@@ -51,8 +33,17 @@ func compare(first interface{}, second interface{}) int {
 	if bIsInt {
 		return compare(first, List{bInt})
 	}
-	// Both are Lists
-	return first.(List).Compare(second.(List))
+
+	aList := first.(List)
+	bList := second.(List)
+	for i, j := 0, 0; i < len(aList) && j < len(bList); i, j = i+1, j+1 {
+		cmp := compare(aList[i], bList[j])
+		if cmp != 0 {
+			return cmp
+		}
+	}
+
+	return compare(len(aList), len(bList))
 }
 
 func main() {
@@ -85,44 +76,6 @@ func parseInput(in string) []Pair {
 }
 
 func parseList(str string) List {
-	/*str = strings.TrimSuffix(strings.TrimPrefix(str, "["), "]")
-	var bal int
-	var buf string
-	var tokens []string
-	for i := 0; i < len(str); i++ {
-		buf += string(str[i])
-		if str[i] == '[' {
-			bal++
-		} else if str[i] == ']' {
-			bal--
-		} else if str[i] == ',' {
-			if bal == 0 && buf != "" {
-				// Flush buf
-				tokens = append(tokens, buf[:len(buf)-1])
-				buf = ""
-			}
-		}
-	}
-	if buf != "" {
-		// Flush buf
-		tokens = append(tokens, buf)
-		buf = ""
-	}
-
-	var res List
-	for _, token := range tokens {
-		if token[0] == '[' {
-			// List
-			res = append(res, parseList(token))
-		} else {
-			// Int
-			val, _ := strconv.ParseInt(token, 10, 32)
-			res = append(res, int(val))
-		}
-	}
-
-	return res*/
-
 	var stack []List
 	var buf string
 	for i := 0; i < len(str); i++ {
@@ -149,8 +102,7 @@ func parseList(str string) List {
 func solveFirst(input []Pair) int {
 	var res int
 	for i, pair := range input {
-		cmp := pair.First.Compare(pair.Second)
-		if cmp < 0 {
+		if compare(pair.First, pair.Second) < 0 {
 			res += i + 1
 		}
 	}
@@ -169,12 +121,12 @@ func solveSecond(input []Pair) int {
 	lists = append(lists, dividerA, dividerB)
 
 	sort.Slice(lists, func(i, j int) bool {
-		return lists[i].Compare(lists[j]) < 0
+		return compare(lists[i], lists[j]) < 0
 	})
 
 	res := 1
 	for i, list := range lists {
-		if list.Compare(dividerA) == 0 || list.Compare(dividerB) == 0 {
+		if compare(list, dividerA) == 0 || compare(list, dividerB) == 0 {
 			res *= i + 1
 		}
 	}
