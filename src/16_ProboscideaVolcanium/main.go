@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"container/list"
 	"fmt"
 	"os"
 	"regexp"
@@ -11,22 +12,25 @@ import (
 
 type Valve struct {
 	Idx  int
+	Name string
 	Flow int
-	Ins  map[int]bool
-	Outs map[int]bool
+	Ins  map[int]int
+	Outs map[int]int
 }
 
 func (v Valve) String() string {
-	return fmt.Sprintf("{ Idx: %d, Flow: %d, Ins: %v, Outs: %v }", v.Idx, v.Flow, v.Ins, v.Outs)
+	return fmt.Sprintf("{ Idx: %d, Name: %s, Flow: %d, Ins: %v, Outs: %v }\n", v.Idx, v.Name, v.Flow, v.Ins, v.Outs)
 }
 
 func main() {
 	input := parseInput("in.txt")
-	fmt.Printf("%+v\n", input)
-	pruneZeros(input)
-	fmt.Printf("%+v\n", input)
-	//fmt.Println(solveFirst(valveMap, valves, 30))
-	//fmt.Println(solveSecond(valves, 26))
+	//fmt.Printf("%+v\n", input)
+	valves := pruneZeros(input)
+	//fmt.Printf("%+v\n", valves)
+	dists := evalDists(valves)
+	//fmt.Printf("%+v\n", dists)
+	fmt.Println(solveFirst(valves, dists, 30))
+	fmt.Println(solveSecond(valves, dists, 26))
 }
 
 func parseInput(in string) []*Valve {
@@ -49,9 +53,10 @@ func parseInput(in string) []*Valve {
 		valveIdx[name] = len(valves)
 		valves = append(valves, &Valve{
 			Idx:  len(valves),
+			Name: name,
 			Flow: int(flow),
-			Ins:  make(map[int]bool),
-			Outs: make(map[int]bool),
+			Ins:  make(map[int]int),
+			Outs: make(map[int]int),
 		})
 
 		for _, out := range outs {
@@ -60,64 +65,177 @@ func parseInput(in string) []*Valve {
 	}
 
 	for _, edge := range edges {
-		valves[valveIdx[edge[0]]].Outs[valveIdx[edge[1]]] = true
-		valves[valveIdx[edge[1]]].Ins[valveIdx[edge[0]]] = true
+		valves[valveIdx[edge[0]]].Outs[valveIdx[edge[1]]] = 1
+		valves[valveIdx[edge[1]]].Ins[valveIdx[edge[0]]] = 1
 	}
 
 	return valves
 }
 
-func pruneZeros(valves []*Valve) {
-	for toPrune := range valves {
-		if valves[toPrune].Flow == 0 {
-			// Prune this valve
-			for in := range valves[toPrune].Ins {
-				// in -> toPrune -> *
-				delete(valves[in].Outs, toPrune)
-				for toPruneOut := range valves[toPrune].Outs {
-					valves[in].Outs[toPruneOut] = true
+func pruneZeros(valves []*Valve) []*Valve {
+	type IdxDist struct {
+		Idx  int
+		Dist int
+	}
+
+	queue := list.New()
+	for i := range valves {
+		if valves[i].Flow == 0 && valves[i].Name != "AA" {
+			ins := make(map[int]int)
+			queue.PushBack(IdxDist{Idx: i, Dist: 0})
+			isVisited := make(map[int]bool)
+			for queue.Len() != 0 {
+				cur := queue.Remove(queue.Front()).(IdxDist)
+				if isVisited[cur.Idx] {
+					continue
+				}
+				isVisited[cur.Idx] = true
+
+				for in := range valves[cur.Idx].Ins {
+					if valves[in].Flow == 0 && valves[in].Name != "AA" {
+						queue.PushBack(IdxDist{Idx: in, Dist: cur.Dist + 1})
+					} else {
+						if _, ok := ins[in]; !ok || ins[in] > cur.Dist+1 {
+							ins[in] = cur.Dist + 1
+						}
+					}
 				}
 			}
-			for out := range valves[toPrune].Outs {
-				// * -> toPrune -> out
-				delete(valves[out].Ins, toPrune)
-				for toPruneIn := range valves[toPrune].Ins {
-					valves[out].Ins[toPruneIn] = true
+
+			outs := make(map[int]int)
+			queue.PushBack(IdxDist{Idx: i, Dist: 0})
+			isVisited = make(map[int]bool)
+			for queue.Len() != 0 {
+				cur := queue.Remove(queue.Front()).(IdxDist)
+				if isVisited[cur.Idx] {
+					continue
+				}
+				isVisited[cur.Idx] = true
+
+				for out := range valves[cur.Idx].Outs {
+					if valves[out].Flow == 0 && valves[out].Name != "AA" {
+						queue.PushBack(IdxDist{Idx: out, Dist: cur.Dist + 1})
+					} else {
+						if _, ok := outs[out]; !ok || outs[out] > cur.Dist+1 {
+							outs[out] = cur.Dist + 1
+						}
+					}
 				}
 			}
-			valves[toPrune].Ins = nil
-			valves[toPrune].Outs = nil
+
+			for in, inDist := range ins {
+				for out, outDist := range outs {
+					if in == out {
+						continue
+					}
+					if _, ok := valves[in].Outs[out]; !ok || valves[in].Outs[out] > inDist+outDist {
+						valves[in].Outs[out] = inDist + outDist
+					}
+					if _, ok := valves[out].Ins[in]; !ok || valves[out].Ins[in] > inDist+outDist {
+						valves[out].Ins[in] = inDist + outDist
+					}
+				}
+			}
 		}
 	}
+
+	newIndexMap := make(map[int]int)
+	for i := range valves {
+		if valves[i].Flow == 0 && valves[i].Name != "AA" {
+			continue
+		}
+		newIndexMap[i] = len(newIndexMap)
+	}
+
+	var newValves []*Valve
+	for i := range valves {
+		if valves[i].Flow == 0 && valves[i].Name != "AA" {
+			continue
+		}
+
+		valves[i].Idx = newIndexMap[i]
+
+		newIns := make(map[int]int)
+		for in, dist := range valves[i].Ins {
+			if _, ok := newIndexMap[in]; !ok {
+				continue
+			}
+
+			newIns[newIndexMap[in]] = dist
+		}
+		valves[i].Ins = newIns
+
+		newOuts := make(map[int]int)
+		for out, dist := range valves[i].Outs {
+			if _, ok := newIndexMap[out]; !ok {
+				continue
+			}
+
+			newOuts[newIndexMap[out]] = dist
+		}
+		valves[i].Outs = newOuts
+
+		newValves = append(newValves, valves[i])
+	}
+
+	return newValves
+}
+
+func evalDists(valves []*Valve) [][]int {
+	dists := make([][]int, len(valves))
+	for i := 0; i < len(valves); i++ {
+		dists[i] = make([]int, len(valves))
+		for j := 0; j < len(valves); j++ {
+			if i == j {
+				dists[i][j] = 0
+			} else {
+				dists[i][j] = 10000
+			}
+		}
+	}
+
+	for i := 0; i < len(valves); i++ {
+		for out, dist := range valves[i].Outs {
+			dists[i][out] = dist
+		}
+	}
+
+	for k := 0; k < len(valves); k++ {
+		for i := 0; i < len(valves); i++ {
+			for j := 0; j < len(valves); j++ {
+				if dists[i][k]+dists[k][j] < dists[i][j] {
+					dists[i][j] = dists[i][k] + dists[k][j]
+				}
+			}
+		}
+	}
+
+	return dists
 }
 
 type State struct {
 	Cur           int
-	Prev          int
-	TimeLeft      int
+	Time          int
 	OpenedBitmask uint64
 }
 
-type PairState struct {
-	FirstCur      int
-	FirstPrev     int
-	SecondCur     int
-	SecondPrev    int
-	TimeLeft      int
-	OpenedBitmask uint64
-}
+func solveFirst(valves []*Valve, dists [][]int, time int) int {
+	var startIdx int
+	for _, valve := range valves {
+		if valve.Name == "AA" {
+			startIdx = valve.Idx
+		}
+	}
 
-func solveFirst(valves []Valve, time int) int {
-	return dfs(valves, State{
-		Cur:           0,
-		Prev:          -1,
-		TimeLeft:      time,
+	return dfs(valves, dists, State{
+		Cur:           startIdx,
+		Time:          time,
 		OpenedBitmask: 0,
 	}, make(map[State]int))
 }
 
-func dfs(valves []Valve, cur State, memo map[State]int) int {
-	if cur.TimeLeft == 0 {
+func dfs(valves []*Valve, dists [][]int, cur State, memo map[State]int) int {
+	if cur.Time == 0 {
 		return 0
 	}
 
@@ -125,23 +243,45 @@ func dfs(valves []Valve, cur State, memo map[State]int) int {
 		return res
 	}
 
-	states, values := evalStatesValues(valves, cur)
+	states, values := evalStatesValues(valves, dists, cur)
 
 	var res int
-	for i := 0; i < len(states); i++ {
-		res = max(res, dfs(valves, states[i], memo)+values[i])
+	for i, state := range states {
+		res = max(res, dfs(valves, dists, state, memo)+values[i])
 	}
 
 	memo[cur] = res
 	return res
 }
 
-func solveSecond(valves []Valve, time int) int {
-	return 0
+type PairState struct {
+	FirstCur      int
+	FirstTime     int
+	SecondCur     int
+	SecondTime    int
+	OpenedBitmask uint64
 }
 
-func dfsPair(valveMap map[string]int, valves []Valve, cur PairState, memo map[PairState]int) int {
-	if cur.TimeLeft == 0 {
+func solveSecond(valves []*Valve, dists [][]int, time int) int {
+	var startIdx int
+	for _, valve := range valves {
+		if valve.Name == "AA" {
+			startIdx = valve.Idx
+		}
+	}
+
+	return dfsPair(valves, dists, PairState{
+		FirstCur:      startIdx,
+		FirstTime:     time,
+		SecondCur:     startIdx,
+		SecondTime:    time,
+		OpenedBitmask: 0,
+	}, make(map[PairState]int))
+}
+
+func dfsPair(valves []*Valve, dists [][]int, cur PairState, memo map[PairState]int) int {
+	curTime := max(cur.FirstTime, cur.SecondTime)
+	if curTime == 0 {
 		return 0
 	}
 
@@ -149,42 +289,54 @@ func dfsPair(valveMap map[string]int, valves []Valve, cur PairState, memo map[Pa
 		return res
 	}
 
-	firstStates, firstValues := evalStatesValues(valves, State{
+	firstStates, firstValues := evalStatesValues(valves, dists, State{
 		Cur:           cur.FirstCur,
-		Prev:          cur.FirstPrev,
-		TimeLeft:      cur.TimeLeft,
+		Time:          cur.FirstTime,
 		OpenedBitmask: cur.OpenedBitmask,
 	})
-	secondStates, secondValues := evalStatesValues(valves, State{
+
+	secondStates, secondValues := evalStatesValues(valves, dists, State{
 		Cur:           cur.SecondCur,
-		Prev:          cur.SecondPrev,
-		TimeLeft:      cur.TimeLeft,
+		Time:          cur.SecondTime,
 		OpenedBitmask: cur.OpenedBitmask,
 	})
 
 	var res int
-	for i := 0; i < len(firstStates); i++ {
-		for j := 0; j < len(secondStates); j++ {
-			firstState := firstStates[i]
-			secondState := secondStates[j]
-
-			// Invalid pruning
-			/*if firstState.Idx == secondState.Idx && firstState.PrevIdx == secondState.PrevIdx {
-				continue
-			}*/
-
-			if firstState.Cur > secondState.Cur {
-				firstState, secondState = secondState, firstState
+	if len(firstStates) != 0 && len(secondStates) != 0 {
+		for i, firstState := range firstStates {
+			for j, secondState := range secondStates {
+				if firstState.Cur == secondState.Cur {
+					// Can't open the same valve
+					continue
+				}
+				res = max(res, dfsPair(valves, dists, PairState{
+					FirstCur:      firstState.Cur,
+					FirstTime:     firstState.Time,
+					SecondCur:     secondState.Cur,
+					SecondTime:    secondState.Time,
+					OpenedBitmask: firstState.OpenedBitmask | secondState.OpenedBitmask,
+				}, memo)+firstValues[i]+secondValues[j])
 			}
-
-			res = max(res, dfsPair(valveMap, valves, PairState{
+		}
+	} else if len(firstStates) != 0 {
+		for i, firstState := range firstStates {
+			res = max(res, dfsPair(valves, dists, PairState{
 				FirstCur:      firstState.Cur,
-				FirstPrev:     firstState.Prev,
+				FirstTime:     firstState.Time,
+				SecondCur:     cur.SecondCur,
+				SecondTime:    cur.SecondTime,
+				OpenedBitmask: firstState.OpenedBitmask,
+			}, memo)+firstValues[i])
+		}
+	} else if len(secondStates) != 0 {
+		for i, secondState := range secondStates {
+			res = max(res, dfsPair(valves, dists, PairState{
+				FirstCur:      cur.FirstCur,
+				FirstTime:     cur.FirstTime,
 				SecondCur:     secondState.Cur,
-				SecondPrev:    secondState.Prev,
-				TimeLeft:      cur.TimeLeft - 1,
-				OpenedBitmask: firstState.OpenedBitmask | secondState.OpenedBitmask,
-			}, memo)+firstValues[i]+secondValues[j])
+				SecondTime:    secondState.Time,
+				OpenedBitmask: secondState.OpenedBitmask,
+			}, memo)+secondValues[i])
 		}
 	}
 
@@ -192,30 +344,26 @@ func dfsPair(valveMap map[string]int, valves []Valve, cur PairState, memo map[Pa
 	return res
 }
 
-func evalStatesValues(valves []Valve, state State) ([]State, []int) {
+func evalStatesValues(valves []*Valve, dists [][]int, cur State) ([]State, []int) {
 	var states []State
 	var values []int
-	if state.OpenedBitmask&(1<<state.Cur) == 0 && valves[state.Cur].Flow != 0 {
-		states = append(states, State{
-			Cur:           state.Cur,
-			Prev:          state.Cur,
-			TimeLeft:      state.TimeLeft - 1,
-			OpenedBitmask: state.OpenedBitmask | (1 << state.Cur),
-		})
-		values = append(values, valves[state.Cur].Flow*(state.TimeLeft-1))
-	}
-	for out := range valves[state.Cur].Outs {
-		if out == state.Prev {
-			continue
-		}
 
-		states = append(states, State{
-			Cur:           out,
-			Prev:          state.Cur,
-			TimeLeft:      state.TimeLeft - 1,
-			OpenedBitmask: state.OpenedBitmask,
-		})
-		values = append(values, 0)
+	for i := 0; i < len(valves); i++ {
+		if cur.OpenedBitmask&(1<<i) == 0 {
+			// Not opened yet
+			timeNeeded := dists[cur.Cur][i] + 1
+			if cur.Time < timeNeeded {
+				// Not enough time
+				continue
+			}
+
+			states = append(states, State{
+				Cur:           i,
+				Time:          cur.Time - timeNeeded,
+				OpenedBitmask: cur.OpenedBitmask | (1 << i),
+			})
+			values = append(values, valves[i].Flow*(cur.Time-timeNeeded))
+		}
 	}
 
 	return states, values
