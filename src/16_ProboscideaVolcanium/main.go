@@ -72,6 +72,7 @@ func parseInput(in string) []*Valve {
 	return valves
 }
 
+// pruneZeros removes valves with 0 flow and directly connects all incoming edges with all outgoing edges.
 func pruneZeros(valves []*Valve) []*Valve {
 	type IdxDist struct {
 		Idx  int
@@ -81,6 +82,7 @@ func pruneZeros(valves []*Valve) []*Valve {
 	queue := list.New()
 	for i := range valves {
 		if valves[i].Flow == 0 && valves[i].Name != "AA" {
+			// Evaluate incoming edges should this valve be removed
 			ins := make(map[int]int)
 			queue.PushBack(IdxDist{Idx: i, Dist: 0})
 			isVisited := make(map[int]bool)
@@ -102,6 +104,7 @@ func pruneZeros(valves []*Valve) []*Valve {
 				}
 			}
 
+			// Evaluate outgoing edges should this valve be removed
 			outs := make(map[int]int)
 			queue.PushBack(IdxDist{Idx: i, Dist: 0})
 			isVisited = make(map[int]bool)
@@ -123,6 +126,7 @@ func pruneZeros(valves []*Valve) []*Valve {
 				}
 			}
 
+			// Connect all incoming edges with outgoing edges (pairwise)
 			for in, inDist := range ins {
 				for out, outDist := range outs {
 					if in == out {
@@ -139,6 +143,7 @@ func pruneZeros(valves []*Valve) []*Valve {
 		}
 	}
 
+	// Compress index after valve removal
 	newIndexMap := make(map[int]int)
 	for i := range valves {
 		if valves[i].Flow == 0 && valves[i].Name != "AA" {
@@ -181,6 +186,8 @@ func pruneZeros(valves []*Valve) []*Valve {
 	return newValves
 }
 
+// evalDists evaluates the shortest path distance between each pair of valves.
+// Uses Floyd-Warshall algorithm; O(V^3).
 func evalDists(valves []*Valve) [][]int {
 	dists := make([][]int, len(valves))
 	for i := 0; i < len(valves); i++ {
@@ -189,7 +196,7 @@ func evalDists(valves []*Valve) [][]int {
 			if i == j {
 				dists[i][j] = 0
 			} else {
-				dists[i][j] = 10000
+				dists[i][j] = 10000 // arbitrarily high value (unreachable)
 			}
 		}
 	}
@@ -216,7 +223,7 @@ func evalDists(valves []*Valve) [][]int {
 type State struct {
 	Cur           int
 	Time          int
-	OpenedBitmask uint64
+	OpenedBitmask int
 }
 
 func solveFirst(valves []*Valve, dists [][]int, time int) int {
@@ -259,7 +266,7 @@ type PairState struct {
 	FirstTime     int
 	SecondCur     int
 	SecondTime    int
-	OpenedBitmask uint64
+	OpenedBitmask int
 }
 
 func solveSecond(valves []*Valve, dists [][]int, time int) int {
@@ -289,17 +296,25 @@ func dfsPair(valves []*Valve, dists [][]int, cur PairState, memo map[PairState]i
 		return res
 	}
 
-	firstStates, firstValues := evalStatesValues(valves, dists, State{
-		Cur:           cur.FirstCur,
-		Time:          cur.FirstTime,
-		OpenedBitmask: cur.OpenedBitmask,
-	})
+	var firstStates []State
+	var firstValues []int
+	if curTime == cur.FirstTime {
+		firstStates, firstValues = evalStatesValues(valves, dists, State{
+			Cur:           cur.FirstCur,
+			Time:          cur.FirstTime,
+			OpenedBitmask: cur.OpenedBitmask,
+		})
+	}
 
-	secondStates, secondValues := evalStatesValues(valves, dists, State{
-		Cur:           cur.SecondCur,
-		Time:          cur.SecondTime,
-		OpenedBitmask: cur.OpenedBitmask,
-	})
+	var secondStates []State
+	var secondValues []int
+	if curTime == cur.SecondTime {
+		secondStates, secondValues = evalStatesValues(valves, dists, State{
+			Cur:           cur.SecondCur,
+			Time:          cur.SecondTime,
+			OpenedBitmask: cur.OpenedBitmask,
+		})
+	}
 
 	var res int
 	if len(firstStates) != 0 && len(secondStates) != 0 {
@@ -349,8 +364,8 @@ func evalStatesValues(valves []*Valve, dists [][]int, cur State) ([]State, []int
 	var values []int
 
 	for i := 0; i < len(valves); i++ {
-		if cur.OpenedBitmask&(1<<i) == 0 {
-			// Not opened yet
+		if valves[i].Flow != 0 && cur.OpenedBitmask&(1<<i) == 0 {
+			// Not 0 flow and not opened yet
 			timeNeeded := dists[cur.Cur][i] + 1
 			if cur.Time < timeNeeded {
 				// Not enough time
