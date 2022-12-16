@@ -16,14 +16,20 @@ type Valve struct {
 	Outs map[int]bool
 }
 
+func (v Valve) String() string {
+	return fmt.Sprintf("{ Idx: %d, Flow: %d, Ins: %v, Outs: %v }", v.Idx, v.Flow, v.Ins, v.Outs)
+}
+
 func main() {
 	input := parseInput("in.txt")
 	fmt.Printf("%+v\n", input)
+	pruneZeros(input)
+	fmt.Printf("%+v\n", input)
 	//fmt.Println(solveFirst(valveMap, valves, 30))
-	fmt.Println(solveSecond(input, 26))
+	//fmt.Println(solveSecond(valves, 26))
 }
 
-func parseInput(in string) []Valve {
+func parseInput(in string) []*Valve {
 	re := regexp.MustCompile("Valve (?P<valve_id>[A-Z]{2}) has flow rate=(?P<flow_rate>\\d+); tunnel[s]? lead[s]? to valve[s]? (?P<connected_valves>[A-Z, ]+)")
 
 	f, _ := os.Open(in)
@@ -33,7 +39,7 @@ func parseInput(in string) []Valve {
 
 	valveIdx := make(map[string]int)
 	var edges [][2]string
-	var valves []Valve
+	var valves []*Valve
 	for s.Scan() {
 		tokens := re.FindStringSubmatch(s.Text())
 		name := tokens[1]
@@ -41,9 +47,11 @@ func parseInput(in string) []Valve {
 		outs := strings.Split(tokens[3], ", ")
 
 		valveIdx[name] = len(valves)
-		valves = append(valves, Valve{
+		valves = append(valves, &Valve{
 			Idx:  len(valves),
 			Flow: int(flow),
+			Ins:  make(map[int]bool),
+			Outs: make(map[int]bool),
 		})
 
 		for _, out := range outs {
@@ -57,6 +65,30 @@ func parseInput(in string) []Valve {
 	}
 
 	return valves
+}
+
+func pruneZeros(valves []*Valve) {
+	for toPrune := range valves {
+		if valves[toPrune].Flow == 0 {
+			// Prune this valve
+			for in := range valves[toPrune].Ins {
+				// in -> toPrune -> *
+				delete(valves[in].Outs, toPrune)
+				for toPruneOut := range valves[toPrune].Outs {
+					valves[in].Outs[toPruneOut] = true
+				}
+			}
+			for out := range valves[toPrune].Outs {
+				// * -> toPrune -> out
+				delete(valves[out].Ins, toPrune)
+				for toPruneIn := range valves[toPrune].Ins {
+					valves[out].Ins[toPruneIn] = true
+				}
+			}
+			valves[toPrune].Ins = nil
+			valves[toPrune].Outs = nil
+		}
+	}
 }
 
 type State struct {
@@ -172,7 +204,7 @@ func evalStatesValues(valves []Valve, state State) ([]State, []int) {
 		})
 		values = append(values, valves[state.Cur].Flow*(state.TimeLeft-1))
 	}
-	for _, out := range valves[state.Cur].Outs {
+	for out := range valves[state.Cur].Outs {
 		if out == state.Prev {
 			continue
 		}
